@@ -76,7 +76,6 @@ class TechnicalAnalyzerAgent:
         
         logger.info("Running the technical analysis")
         response = self.llm.invoke(messages)
-        # Log the LLM reasoning (first 500 chars) for traceability
         try:
             logger.reasoning(response.content[:500])
         except Exception:

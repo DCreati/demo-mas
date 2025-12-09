@@ -98,7 +98,6 @@ class SynthesisAgent:
         logger.info("Pulling together the remaining context for the report")
         
         response = self.llm.invoke(messages)
-        # Log the LLM reasoning (first 500 chars) for traceability
         try:
             logger.reasoning(response.content[:500])
         except Exception:
