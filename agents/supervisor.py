@@ -1,21 +1,22 @@
 import json
 from typing import Dict, Any
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from graph.state import AgentState
 from utils.logger import logger, format_agent_message
 from utils.prompts import build_supervisor_prompt
+from utils.model_factory import create_llm
 
 
 class SupervisorAgent:
     
-    def __init__(self, model_name: str = "llama3.1:8b"):
+    def __init__(self, model_name: str = "llama3.1:8b", local: int = 1):
         self.name = "Supervisor"
         self.model_name = model_name
         
-        self.llm = ChatOllama(
-            model=model_name,
+        self.llm = create_llm(
+            model_name=model_name,
+            local=local,
             temperature=0.3,  # Lower temperature for consistent decisions
             num_predict=500   # Limit output length
         )

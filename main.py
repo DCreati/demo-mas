@@ -1,13 +1,20 @@
 import sys
 import time
+import os
+from pathlib import Path
 
 from graph.state import create_initial_state, get_state_summary
 from graph.workflow import create_research_workflow, run_workflow, display_workflow_summary
 from utils.logger import logger, set_verbosity
 
-MODEL_NAME = "llama3.1:8b"
 VERBOSITY = 1
 INTERACTIVE_MODE = False
+
+LOCAL = 0  # 1 = Ollama, 0 = GPT 4o-mini
+if LOCAL == 1:
+    MODEL_NAME = "llama3.1:8b"
+else:
+    MODEL_NAME = "gpt-4o-mini"
 
 SAMPLE_PAPER = """
 Recent advances in deep learning have demonstrated remarkable performance in image classification tasks. 
@@ -26,6 +33,33 @@ adapt to new tasks with minimal data while remaining resilient to distributional
 """
 
 
+def load_api_key() -> str:
+    """Load OpenAI API key from .env file"""
+    env_file = Path(".env")
+    
+    if not env_file.exists():
+        logger.error("File .env non trovato!")
+        logger.error("Copia .env.example in .env e aggiungi la tua API key OpenAI")
+        sys.exit(1)
+    
+    try:
+        with open(env_file, 'r') as f:
+            for line in f:
+                if line.startswith("OPENAI_API_KEY="):
+                    api_key = line.split("=", 1)[1].strip()
+                    if api_key and not api_key.startswith("sk-your-key"):
+                        os.environ["OPENAI_API_KEY"] = api_key
+                        logger.success("API key caricata con successo")
+                        return api_key
+        
+        logger.error("API key non trovata in .env o non valida")
+        sys.exit(1)
+        
+    except Exception as e:
+        logger.error(f"Errore durante la lettura di .env: {str(e)}")
+        sys.exit(1)
+
+
 def check_ollama_connection(model_name: str) -> bool:
     try:
         from langchain_ollama import ChatOllama
@@ -37,6 +71,23 @@ def check_ollama_connection(model_name: str) -> bool:
         return True
         
     except Exception as e:
+        logger.error(f"Ollama connection failed: {str(e)}")
+        return False
+
+
+def check_openai_connection() -> bool:
+    """Check OpenAI API connection"""
+    try:
+        from langchain_openai import ChatOpenAI
+        
+        llm = ChatOpenAI(model="gpt-4o-mini", max_tokens=10)
+        llm.invoke("test")
+        
+        logger.success("OpenAI API connection successful")
+        return True
+        
+    except Exception as e:
+        logger.error(f"OpenAI API connection failed: {str(e)}")
         return False
 
 
@@ -54,8 +105,16 @@ def main():
     
     display_welcome_banner()
     
-    if not check_ollama_connection(MODEL_NAME):
-        sys.exit(1)
+    if LOCAL == 0:
+        logger.info("Loading OpenAI API key...")
+        load_api_key()
+        if not check_openai_connection():
+            sys.exit(1)
+    else:
+        logger.info("Checking Ollama connection...")
+        if not check_ollama_connection(MODEL_NAME):
+            logger.error("Ollama is not running or model not found")
+            sys.exit(1)
     
     logger.info("Using embedded sample paper abstract")
     paper_abstract = SAMPLE_PAPER.strip()
@@ -73,7 +132,7 @@ def main():
         logger.info(get_state_summary(initial_state))
     
     try:
-        workflow = create_research_workflow(model_name=MODEL_NAME)
+        workflow = create_research_workflow(model_name=MODEL_NAME, local=LOCAL)
     except Exception as e:
         logger.error(f"Failed to create workflow: {str(e)}")
         sys.exit(1)
@@ -109,24 +168,6 @@ def main():
     logger.info(f"Total agent messages: {len(final_state.get('messages', []))}")
     logger.info(f"Workflow iterations: {final_state.get('iteration_count', 0)}")
     logger.info(f"Analysis complete: {final_state.get('analysis_complete', False)}")
-    
-    if INTERACTIVE_MODE:
-        save = input("\nSave final report to file? (y/n): ")
-        if save.lower() == 'y':
-            filename = input("Enter filename (default: review_report.txt): ").strip()
-            if not filename:
-                filename = "review_report.txt"
-            
-            try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write("=" * 70 + "\n")
-                    f.write("MAS RESEARCH PAPER REVIEW\n")
-                    f.write("=" * 70 + "\n\n")
-                    f.write(final_state.get("final_report", "No report generated"))
-                
-                logger.success(f"Report saved to: {filename}")
-            except Exception as e:
-                logger.error(f"Failed to save report: {str(e)}")
     
     logger.header("DEMONSTRATION END")
 

@@ -1,19 +1,20 @@
 from typing import Dict, Any
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from graph.state import AgentState
 from utils.logger import logger, format_agent_message
 from utils.prompts import build_critical_prompt
+from utils.model_factory import create_llm
 
 
 class CriticalReviewerAgent:
-    def __init__(self, model_name: str = "llama3.1:8b"):
+    def __init__(self, model_name: str = "llama3.1:8b", local: int = 1):
         self.name = "Critical Reviewer"
         self.model_name = model_name
         
-        self.llm = ChatOllama(
-            model=model_name,
+        self.llm = create_llm(
+            model_name=model_name,
+            local=local,
             temperature=0.6,  # Higher creativity for identifying issues
             num_predict=800
         )
@@ -64,7 +65,7 @@ class CriticalReviewerAgent:
             logger.success("Critical review complete")
             
             updated_state["next_agent"] = "supervisor"
-            
+                    
             return updated_state
             
         except Exception as e:
@@ -82,5 +83,10 @@ class CriticalReviewerAgent:
         
         logger.info("Running the critical review")
         response = self.llm.invoke(messages)
-        
+        # Log the LLM reasoning (first 500 chars) for traceability
+        try:
+            logger.reasoning(response.content[:500])
+        except Exception:
+            pass
+
         return response.content

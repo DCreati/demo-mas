@@ -1,20 +1,21 @@
 from typing import Dict, Any
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from graph.state import AgentState
 from utils.logger import logger, format_agent_message
 from utils.prompts import build_synthesis_prompt
+from utils.model_factory import create_llm
 
 
 class SynthesisAgent:
     
-    def __init__(self, model_name: str = "llama3.1:8b"):
+    def __init__(self, model_name: str = "llama3.1:8b", local: int = 1):
         self.name = "Synthesis Agent"
         self.model_name = model_name
         
-        self.llm = ChatOllama(
-            model=model_name,
+        self.llm = create_llm(
+            model_name=model_name,
+            local=local,
             temperature=0.5,  # Balanced for coherent synthesis
             num_predict=1200  # Longer for comprehensive report
         )
@@ -97,5 +98,10 @@ class SynthesisAgent:
         logger.info("Pulling together the remaining context for the report")
         
         response = self.llm.invoke(messages)
-        
+        # Log the LLM reasoning (first 500 chars) for traceability
+        try:
+            logger.reasoning(response.content[:500])
+        except Exception:
+            pass
+
         return response.content

@@ -11,14 +11,14 @@ from agents.synthesis_agent import SynthesisAgent
 from utils.logger import logger
 
 
-def create_research_workflow(model_name: str = "llama3.1:8b") -> StateGraph:
+def create_research_workflow(model_name: str = "llama3.1:8b", local: int = 1) -> StateGraph:
     logger.info("Building the multi-agent workflow graph")
     
-    supervisor = SupervisorAgent(model_name)
-    literature_reviewer = LiteratureReviewerAgent(model_name)
-    technical_analyzer = TechnicalAnalyzerAgent(model_name)
-    critical_reviewer = CriticalReviewerAgent(model_name)
-    synthesis_agent = SynthesisAgent(model_name)
+    supervisor = SupervisorAgent(model_name, local)
+    literature_reviewer = LiteratureReviewerAgent(model_name, local)
+    technical_analyzer = TechnicalAnalyzerAgent(model_name, local)
+    critical_reviewer = CriticalReviewerAgent(model_name, local)
+    synthesis_agent = SynthesisAgent(model_name, local)
     
     logger.info("All agents initialized")
     
@@ -56,9 +56,9 @@ def create_research_workflow(model_name: str = "llama3.1:8b") -> StateGraph:
     compiled_workflow = workflow.compile()
     
     logger.success("Workflow compilation complete")
-    logger.info("   Architecture: Hierarchical Multi-Agent System")
-    logger.info("   Coordination: Supervisor-based routing")
-    logger.info("   Communication: Shared state (blackboard pattern)")
+    logger.info("Architecture: Hierarchical Multi-Agent System")
+    logger.info("Coordination: Supervisor-based routing")
+    logger.info("Communication: Shared state (blackboard pattern)")
     
     return compiled_workflow
 
