@@ -12,10 +12,15 @@ class AgentState(TypedDict):
     literature_findings: NotRequired[str]
     technical_analysis: NotRequired[str]
     critical_review: NotRequired[str]
+    critical_evaluation: NotRequired[str]
     final_report: NotRequired[str]
     
     analysis_complete: bool
     iteration_count: NotRequired[int]
+    needs_rerun: NotRequired[list]  # Agents to rerun: ["literature_reviewer"] or ["technical_analyzer"]
+    rerun_count: NotRequired[dict]  # Track how many times each agent has been rerun
+    literature_rerun_count: NotRequired[int]
+    technical_rerun_count: NotRequired[int]
 
 
 def create_initial_state(paper_abstract: str) -> AgentState:
@@ -24,7 +29,11 @@ def create_initial_state(paper_abstract: str) -> AgentState:
         messages=[],
         next_agent="supervisor",
         analysis_complete=False,
-        iteration_count=0
+        iteration_count=0,
+        needs_rerun=[],
+        rerun_count={},
+        literature_rerun_count=0,
+        technical_rerun_count=0
     )
 
 
@@ -49,7 +58,12 @@ STATE_FIELD_DESCRIPTIONS = {
     "literature_findings": "Literature review results",
     "technical_analysis": "Technical methodology analysis",
     "critical_review": "Critical evaluation and improvements",
+    "critical_evaluation": "JSON output from critical reviewer with quality assessment and rerun decision",
     "final_report": "Synthesized final review",
     "analysis_complete": "Workflow termination flag",
-    "iteration_count": "Safety counter to prevent infinite loops"
+    "iteration_count": "Safety counter to prevent infinite loops",
+    "needs_rerun": "List of agent names to rerun based on critical reviewer assessment",
+    "rerun_count": "Track how many times each agent has been rerun",
+    "literature_rerun_count": "Counter for literature reviewer reruns",
+    "technical_rerun_count": "Counter for technical analyzer reruns"
 }

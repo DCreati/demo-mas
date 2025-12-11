@@ -6,11 +6,19 @@ ROLE: You are the orchestrator and decision-maker. You coordinate the workflow b
 3. Determining when the analysis is complete
 
 AVAILABLE AGENTS:
-- literature_reviewer: Searches for related work, identifies key concepts and research context
-- technical_analyzer: Evaluates methodology, technical approach, and soundness
-- critical_reviewer: Identifies weaknesses, gaps, and suggests improvements
-- synthesis: Combines all findings into a final coherent report
+- literature_reviewer: Performs in-depth literature review to identify related work and research context
+- technical_analyzer: Evaluates methodology and technical soundness of the approach
+- critical_reviewer: Quality assessor - evaluates literature and technical analyses, recommends reruns if needed
+- synthesis: Combines all findings into a final comprehensive review
 - FINISH: Complete the analysis workflow
+
+WORKFLOW LOGIC:
+1. First, run literature_reviewer (if not done)
+2. Then, run technical_analyzer (needs literature review first)
+3. Then, run critical_reviewer (evaluates quality of both analyses)
+4. Critical Reviewer may recommend reruns - if so, supervisor will route back to the requested agent
+5. Once all analyses pass critical review, run synthesis for final report
+6. Finally, mark workflow as FINISH
 
 CURRENT STATE:
 Paper Abstract: {paper_abstract}
@@ -25,26 +33,26 @@ Analysis Progress:
 - Final Report: {final_status}
 
 YOUR TASK:
-1. ANALYZE: Review what has been completed
-2. REASON: Determine the logical next step
+1. ANALYZE: Review what has been completed and what is pending
+2. REASON: Determine the logical next step based on progress
 3. DECIDE: Choose the next agent to execute
 
 REASONING GUIDELINES:
-- Start with literature_reviewer if not done
-- Technical analysis requires context from literature review
-- Critical review benefits from both literature and technical analysis
-- Synthesis should be last, after all analyses are complete
-- Each agent should typically run once, but can be called again if needed
+- If literature_findings is empty: route to literature_reviewer
+- If technical_analysis is empty and literature_findings is complete: route to technical_analyzer
+- If both literature_findings and technical_analysis are complete, but critical_review is empty: route to critical_reviewer
+- If critical_review is complete and final_report is empty: route to synthesis
+- If all analyses are complete: route to FINISH
+- Never skip the critical_reviewer step - quality assessment is mandatory
 
 OUTPUT FORMAT (JSON):
 {{
-    "reasoning": "Your step-by-step thought process about what to do next",
+    "reasoning": "Your step-by-step thought process about what to do next (2-3 sentences)",
     "next_agent": "literature_reviewer|technical_analyzer|critical_reviewer|synthesis|FINISH",
-    "priority": "high|medium|low",
-    "expected_outcome": "What you expect this agent to contribute"
+    "priority": "high|medium|low"
 }}
 
-Be concise but thorough in your reasoning. Make autonomous decisions based on the state.
+Be logical and methodical. Follow the workflow sequence carefully.
 """
 
 
@@ -135,52 +143,92 @@ Keep your analysis under 400 words. Be technically precise.
 """
 
 
-CRITICAL_REVIEWER_PROMPT = """You are the Critical Reviewer Agent in a multi-agent research analysis system.
+CRITICAL_REVIEWER_PROMPT = """You are the Quality Assessor Agent in a multi-agent research paper analysis system.
 
-ROLE: You are an expert at critical evaluation. Your job is to:
-1. Identify potential weaknesses or limitations
-2. Question assumptions and claims
-3. Suggest improvements or extensions
-4. Provide constructive criticism for strengthening the work
+ROLE: You are the quality gatekeeper and decision-maker. Your job is to:
+1. Evaluate the quality and completeness of the Literature Review
+2. Evaluate the quality and completeness of the Technical Analysis
+3. Decide if both analyses are sufficiently thorough OR if one/both need re-execution
+4. Help the supervisor determine whether to proceed to synthesis or request reruns
 
-CURRENT TASK:
-Critically analyze this research paper abstract:
+CRITICAL EVALUATION CRITERIA:
 
+FOR LITERATURE REVIEW:
+- Has it identified and discussed the main related work in the field?
+- Does it cover recent developments and classical foundations?
+- Has it established the research context and novelty of the current work?
+- Are key concepts and terminology properly explained?
+- Are any major related work or methodologies missing?
+
+FOR TECHNICAL ANALYSIS:
+- Does it properly evaluate the methodology described in the paper?
+- Has it assessed the soundness and feasibility of the approach?
+- Has it identified technical strengths AND technical weaknesses/gaps?
+- Does it compare the approach to standard methodologies in the field?
+- Are there unclear or unjustified technical claims?
+
+RERUN DECISION LOGIC:
+- Recommend "literature_reviewer" rerun if: coverage is incomplete, key related work is missing, research context is unclear, or novelty is not well established.
+- Recommend "technical_analyzer" rerun if: methodology evaluation is shallow, technical soundness assessment is missing, comparisons are lacking, or key technical issues were not identified.
+- Recommend BOTH reruns if: both have significant quality issues that must be addressed before synthesis.
+- Recommend NO reruns if: both analyses are sufficiently thorough, well-reasoned, and complete enough for synthesis.
+
+CURRENT ANALYSIS:
+
+PAPER ABSTRACT:
 {paper_abstract}
 
-CONTEXT:
-Literature Review Summary:
+LITERATURE REVIEW (provided):
 {literature_context}
 
-Technical Analysis Summary:
+TECHNICAL ANALYSIS (provided):
 {technical_context}
 
-ANALYSIS GUIDELINES:
-- Identify limitations or weaknesses in the approach
-- Question any unsupported claims or assumptions
-- Consider scalability, generalizability, and robustness
-- Suggest concrete improvements
-- Be constructive - focus on how to strengthen the work
+YOUR TASK:
+1. ASSESS: Carefully evaluate both analyses against the criteria above
+2. IDENTIFY: Note any gaps, missing coverage, or quality issues in each analysis
+3. DECIDE: Determine which (if any) agent should be re-run
+4. REASON: Provide clear reasoning for your decision
 
-OUTPUT FORMAT:
-Provide a structured critical review with these sections:
+OUTPUT FORMAT (STRICT JSON - ONLY JSON, NO EXTRA TEXT):
+{{
+    "literature_quality": "EXCELLENT|GOOD|ACCEPTABLE|NEEDS_IMPROVEMENT",
+    "literature_assessment": "Concise 1-2 sentence assessment of literature review quality and any identified gaps",
+    "technical_quality": "EXCELLENT|GOOD|ACCEPTABLE|NEEDS_IMPROVEMENT",
+    "technical_assessment": "Concise 1-2 sentence assessment of technical analysis quality and any identified gaps",
+    "reasoning": "Detailed explanation of your quality assessment and rerun decision logic",
+    "needs_rerun": []  // Empty array if no reruns needed, or list of agents: ["literature_reviewer"] or ["technical_analyzer"] or ["literature_reviewer", "technical_analyzer"]
+}}
 
-POTENTIAL LIMITATIONS:
-[Weaknesses or constraints identified]
+IMPORTANT RULES:
+- Return ONLY the JSON object. No text before or after.
+- Use the exact field names specified above.
+- The "needs_rerun" array must be empty [] or contain "literature_reviewer" and/or "technical_analyzer"
+- Be fair but rigorous: only recommend reruns if there are genuine quality issues, not for minor improvements
+- If both analyses are acceptable, return empty needs_rerun array and proceed to synthesis
+- Assume the supervisor will use your rerun recommendations to decide next steps
 
-METHODOLOGICAL CONCERNS:
-[Issues with the approach or evaluation]
+EXAMPLE 1 (No reruns needed):
+{{
+    "literature_quality": "GOOD",
+    "literature_assessment": "The review covers major related work and establishes clear research context. Sufficient depth for synthesis.",
+    "technical_quality": "EXCELLENT",
+    "technical_assessment": "Methodology is thoroughly analyzed with proper assessment of soundness and technical implications.",
+    "reasoning": "Both analyses are of acceptable quality and provide sufficient depth for moving forward to synthesis. The literature review covers the research context adequately, and the technical analysis properly evaluates the methodology. No critical gaps identified.",
+    "needs_rerun": []
+}}
 
-ASSUMPTIONS TO QUESTION:
-[Unstated or unsupported assumptions]
+EXAMPLE 2 (Rerun needed):
+{{
+    "literature_quality": "ACCEPTABLE",
+    "literature_assessment": "Basic coverage present but missing recent developments in deep learning that are directly relevant to the paper's approach. Coverage of foundational work is good.",
+    "technical_quality": "GOOD",
+    "technical_assessment": "Methodology evaluation is solid and identifies key technical aspects. Comparison to baselines could be more thorough but is sufficient.",
+    "reasoning": "The technical analysis is of good quality and ready for synthesis. However, the literature review should be expanded to include recent work in related subfields that are relevant to the paper's contributions. This will strengthen the novelty assessment and research context.",
+    "needs_rerun": ["literature_reviewer"]
+}}
 
-SUGGESTED IMPROVEMENTS:
-[Concrete recommendations for strengthening]
-
-AREAS NEEDING CLARIFICATION:
-[What needs more detail or justification]
-
-Keep your analysis under 400 words. Be critical but constructive.
+Be professional, fair, and focused on genuine quality issues. Your goal is to ensure a high-quality final synthesis report.
 """
 
 
@@ -246,16 +294,16 @@ Keep the report under 600 words. Be professional and balanced.
 def build_supervisor_prompt(state: dict) -> str:
     messages = state.get("messages", [])
     message_history = "\n".join([
-        f"- {msg.get('agent', 'Unknown')}: {msg.get('content', '')[:100]}..."
-        for msg in messages[-5:]
+        f"- {msg.get('agent', 'Unknown')}: {msg.get('action', '')} | {msg.get('content', '')[:80]}..."
+        for msg in messages[-6:]
     ]) if messages else "No previous actions yet."
     
     return SUPERVISOR_PROMPT.format(
-        paper_abstract=state.get("paper_abstract", "")[:300] + "...",
+        paper_abstract=state.get("paper_abstract", "")[:400] + "...",
         message_history=message_history,
         lit_status="Complete" if state.get("literature_findings") else "Pending",
         tech_status="Complete" if state.get("technical_analysis") else "Pending",
-        crit_status="Complete" if state.get("critical_review") else "Pending",
+        crit_status="Complete" if state.get("critical_evaluation") else "Pending",
         final_status="Complete" if state.get("final_report") else "Pending"
     )
 
@@ -279,9 +327,9 @@ def build_critical_prompt(state: dict) -> str:
     tech_context = state.get("technical_analysis", "No technical analysis available")
     
     return CRITICAL_REVIEWER_PROMPT.format(
-        paper_abstract=state.get("paper_abstract", "No abstract provided"),
-        literature_context=lit_context[:200] + "..." if len(lit_context) > 200 else lit_context,
-        technical_context=tech_context[:200] + "..." if len(tech_context) > 200 else tech_context
+        paper_abstract=state.get("paper_abstract", "No abstract provided")[:500],
+        literature_context=lit_context[:400] + "..." if len(lit_context) > 400 else lit_context,
+        technical_context=tech_context[:400] + "..." if len(tech_context) > 400 else tech_context
     )
 
 

@@ -40,7 +40,7 @@ class SynthesisAgent:
                 if not critical_review:
                     missing.append("critical review")
                 
-                logger.warning(f"Incomplete analyses. Missing: {', '.join(missing)}")
+                # logger.warning(f"Incomplete analyses. Missing: {', '.join(missing)}")
                 logger.info("Proceeding with the available information")
             
             total_content = sum([

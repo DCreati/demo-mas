@@ -30,10 +30,53 @@ class SupervisorAgent:
             iteration = state.get("iteration_count", 0) + 1
             logger.info(f"Reviewing workflow state (iteration {iteration})")
             
-            if iteration > 10:
+            if iteration > 15:
                 logger.warning("Maximum iterations reached. Forcing completion.")
                 return self._force_completion(state)
-            
+
+            # Check if Critical Reviewer has recommended reruns
+            needs_rerun = state.get("needs_rerun") or []
+            if needs_rerun:
+                # Process rerun requests from Critical Reviewer
+                next_agent = needs_rerun[0]
+                logger.warning(f"Supervisor detected rerun request from Critical Reviewer: {needs_rerun}")
+                logger.info(f"Routing to {next_agent} for re-execution")
+
+                # Check if this agent has been rerun too many times (safety check)
+                lit_rerun_count = state.get("literature_rerun_count", 0)
+                tech_rerun_count = state.get("technical_rerun_count", 0)
+                
+                if next_agent == "literature_reviewer" and lit_rerun_count >= 2:
+                    logger.warning("Literature Reviewer has been rerun twice already. Forcing quality as-is and proceeding.")
+                    updated_state = state.copy()
+                    updated_state["needs_rerun"] = needs_rerun[1:] if len(needs_rerun) > 1 else []
+                    updated_state["next_agent"] = needs_rerun[1] if len(needs_rerun) > 1 else "FINISH"
+                    return updated_state
+                
+                if next_agent == "technical_analyzer" and tech_rerun_count >= 2:
+                    logger.warning("Technical Analyzer has been rerun twice already. Forcing quality as-is and proceeding.")
+                    updated_state = state.copy()
+                    updated_state["needs_rerun"] = needs_rerun[1:] if len(needs_rerun) > 1 else []
+                    updated_state["next_agent"] = needs_rerun[1] if len(needs_rerun) > 1 else "FINISH"
+                    return updated_state
+
+                updated_state = state.copy()
+                updated_state["next_agent"] = next_agent
+                updated_state["iteration_count"] = iteration
+                updated_state["needs_rerun"] = needs_rerun[1:] if len(needs_rerun) > 1 else []
+
+                supervisor_message = format_agent_message(
+                    agent_name=self.name,
+                    content=f"Routing to rerun: {next_agent} (recommended by Critical Reviewer)",
+                    action="route_rerun"
+                )
+                current_messages = state.get("messages", [])
+                updated_state["messages"] = current_messages + [supervisor_message]
+
+                logger.state_update("next_agent", next_agent)
+                return updated_state
+
+            # Standard routing decision from LLM
             reasoning_output = self._make_routing_decision(state)
             
             decision = self._parse_decision(reasoning_output)
